@@ -1,910 +1,1848 @@
 import streamlit as st
-import time
-import random
+import streamlit.components.v1 as components
 from pathlib import Path
+import base64
 
 # =========================================================
 # 페이지 설정
 # =========================================================
 
 st.set_page_config(
-    page_title="몬치치 돌보기",
+    page_title="몬치치 키우기",
     page_icon="🐒",
-    layout="centered"
+    layout="centered",
+    initial_sidebar_state="collapsed"
 )
 
 # =========================================================
-# CSS
+# 이미지 불러오기
 # =========================================================
 
-st.markdown("""
-<style>
-
-@import url('https://fonts.googleapis.com/css2?family=Jua&display=swap');
-
-html, body, [class*="css"] {
-    font-family: 'Jua', sans-serif;
-}
-
-.stApp {
-    background: #fff1f5;
-}
-
-.block-container {
-    max-width: 700px;
-    padding-top: 25px;
-}
-
-/* 제목 */
-
-.title {
-    text-align: center;
-    font-size: 45px;
-    font-weight: bold;
-    color: #68452f;
-    margin-bottom: 0;
-}
-
-.subtitle {
-    text-align: center;
-    font-size: 18px;
-    color: #a47777;
-    margin-bottom: 25px;
-}
-
-/* 캐릭터 영역 */
-
-.character-box {
-    background: #ffe1e9;
-    border: 4px solid #efbdca;
-    border-radius: 30px;
-    padding: 25px;
-    text-align: center;
-    box-shadow: 0 7px 0 #e5b2bf;
-    margin-bottom: 25px;
-}
-
-/* 상태 */
-
-.status-box {
-    background: white;
-    border: 3px solid #f0cbd4;
-    border-radius: 25px;
-    padding: 20px;
-    margin-bottom: 20px;
-    box-shadow: 0 5px 0 #e8c3ca;
-}
-
-/* 버튼 */
-
-.stButton > button {
-    width: 100%;
-    height: 58px;
-
-    border-radius: 18px;
-
-    border: 2px solid #e7b8c5;
-
-    background-color: white;
-
-    color: #68452f;
-
-    font-size: 18px;
-
-    margin-bottom: 8px;
-}
-
-.stButton > button:hover {
-    background-color: #ffe1e9;
-}
-
-/* 기록 */
-
-.log {
-    background: #fff7f9;
-
-    border: 1px solid #f1d5dc;
-
-    border-radius: 15px;
-
-    padding: 10px;
-
-    margin-top: 6px;
-
-    color: #705858;
-}
-
-/* 단계 */
-
-.badge {
-    display: inline-block;
-
-    background: #ffd5e1;
-
-    color: #68452f;
-
-    border-radius: 20px;
-
-    padding: 7px 16px;
-
-    font-size: 17px;
-
-    margin-bottom: 15px;
-}
-
-</style>
-""", unsafe_allow_html=True)
-
-
-# =========================================================
-# 게임 초기값
-# =========================================================
-
-if "hunger" not in st.session_state:
-    st.session_state.hunger = 80
-
-if "happiness" not in st.session_state:
-    st.session_state.happiness = 80
-
-if "energy" not in st.session_state:
-    st.session_state.energy = 80
-
-if "clean" not in st.session_state:
-    st.session_state.clean = 80
-
-if "health" not in st.session_state:
-    st.session_state.health = 100
-
-if "coin" not in st.session_state:
-    st.session_state.coin = 20
-
-if "xp" not in st.session_state:
-    st.session_state.xp = 0
-
-if "age" not in st.session_state:
-    st.session_state.age = 1
-
-if "sleeping" not in st.session_state:
-    st.session_state.sleeping = False
-
-if "last_update" not in st.session_state:
-    st.session_state.last_update = time.time()
-
-if "logs" not in st.session_state:
-    st.session_state.logs = [
-        "🌸 몬치치가 태어났어요!",
-        "💗 몬치치를 잘 돌봐주세요!"
-    ]
-
-
-# =========================================================
-# 공통 함수
-# =========================================================
-
-def limit(value):
-    return max(0, min(100, int(value)))
-
-
-def add_log(text):
-
-    st.session_state.logs.insert(0, text)
-
-    st.session_state.logs = st.session_state.logs[:6]
-
-
-def get_stage():
-
-    xp = st.session_state.xp
-
-    if xp < 30:
-        return "아기 몬치치", "🐣"
-
-    elif xp < 80:
-        return "어린이 몬치치", "🌱"
-
-    elif xp < 160:
-        return "청소년 몬치치", "⭐"
-
-    else:
-        return "어른 몬치치", "👑"
-
-
-# =========================================================
-# 시간 경과
-# =========================================================
-
-def update_time():
-
-    now = time.time()
-
-    elapsed = now - st.session_state.last_update
-
-    if elapsed < 10:
-        return
-
-    count = int(elapsed // 10)
-
-    st.session_state.last_update += count * 10
-
-    # 자고 있는 경우
-    if st.session_state.sleeping:
-
-        st.session_state.energy = limit(
-            st.session_state.energy + 4 * count
-        )
-
-        st.session_state.hunger = limit(
-            st.session_state.hunger - 1 * count
-        )
-
-    # 깨어 있는 경우
-    else:
-
-        st.session_state.hunger = limit(
-            st.session_state.hunger - 2 * count
-        )
-
-        st.session_state.happiness = limit(
-            st.session_state.happiness - 1 * count
-        )
-
-        st.session_state.energy = limit(
-            st.session_state.energy - 1 * count
-        )
-
-        st.session_state.clean = limit(
-            st.session_state.clean - 1 * count
-        )
-
-    # 상태가 너무 낮으면 건강 감소
-
-    bad = 0
-
-    if st.session_state.hunger <= 10:
-        bad += 1
-
-    if st.session_state.happiness <= 10:
-        bad += 1
-
-    if st.session_state.clean <= 10:
-        bad += 1
-
-    if bad > 0:
-
-        st.session_state.health = limit(
-            st.session_state.health - bad
-        )
-
-
-# =========================================================
-# 먹이기
-# =========================================================
-
-def feed():
-
-    if st.session_state.coin < 2:
-
-        add_log("🪙 코인이 부족해요!")
-
-        return
-
-    st.session_state.coin -= 2
-
-    st.session_state.hunger = limit(
-        st.session_state.hunger + 20
-    )
-
-    st.session_state.happiness = limit(
-        st.session_state.happiness + 5
-    )
-
-    st.session_state.xp += 2
-
-    add_log(
-        "🍌 몬치치가 바나나를 맛있게 먹었어요!"
-    )
-
-
-# =========================================================
-# 놀아주기
-# =========================================================
-
-def play():
-
-    if st.session_state.energy < 15:
-
-        add_log(
-            "😴 몬치치가 너무 피곤해요!"
-        )
-
-        return
-
-    st.session_state.energy = limit(
-        st.session_state.energy - 15
-    )
-
-    st.session_state.happiness = limit(
-        st.session_state.happiness + 20
-    )
-
-    st.session_state.hunger = limit(
-        st.session_state.hunger - 5
-    )
-
-    st.session_state.coin += 3
-
-    st.session_state.xp += 7
-
-    add_log(
-        "🎮 몬치치와 신나게 놀았어요! 🪙 +3"
-    )
-
-
-# =========================================================
-# 목욕
-# =========================================================
-
-def bath():
-
-    st.session_state.clean = limit(
-        st.session_state.clean + 30
-    )
-
-    st.session_state.happiness = limit(
-        st.session_state.happiness + 5
-    )
-
-    st.session_state.xp += 3
-
-    add_log(
-        "🛁 몬치치를 깨끗하게 씻겨줬어요!"
-    )
-
-
-# =========================================================
-# 쓰다듬기
-# =========================================================
-
-def pet():
-
-    st.session_state.happiness = limit(
-        st.session_state.happiness + 10
-    )
-
-    st.session_state.xp += 1
-
-    add_log(
-        "💗 몬치치를 쓰담쓰담했어요!"
-    )
-
-
-# =========================================================
-# 잠자기
-# =========================================================
-
-def sleep():
-
-    if st.session_state.sleeping:
-
-        st.session_state.sleeping = False
-
-        add_log(
-            "☀️ 몬치치가 일어났어요!"
-        )
-
-    else:
-
-        st.session_state.sleeping = True
-
-        add_log(
-            "💤 몬치치가 잠들었어요..."
-        )
-
-
-# =========================================================
-# 랜덤 이벤트
-# =========================================================
-
-def random_event():
-
-    if random.random() < 0.05:
-
-        event = random.choice([
-            "🌸 몬치치가 예쁜 꽃을 발견했어요!",
-            "🍀 행운이 찾아왔어요! 🪙 +5",
-            "💗 몬치치가 갑자기 행복해졌어요!",
-            "🐒 몬치치가 혼자 신나게 놀았어요!"
-        ])
-
-        if "🪙" in event:
-
-            st.session_state.coin += 5
-
-        if "행복" in event:
-
-            st.session_state.happiness = limit(
-                st.session_state.happiness + 10
-            )
-
-        add_log(event)
-
-
-# =========================================================
-# 시간 업데이트
-# =========================================================
-
-update_time()
-
-random_event()
-
-
-# =========================================================
-# 현재 성장 단계
-# =========================================================
-
-stage_name, stage_icon = get_stage()
-
-
-# =========================================================
-# 제목
-# =========================================================
-
-st.markdown(
-    '<div class="title">🐒 몬치치 돌보기</div>',
-    unsafe_allow_html=True
+BASE_DIR = Path(__file__).parent
+
+BACKGROUND = (
+    BASE_DIR
+    / "assets"
+    / "735A6F89-95B8-4CEA-80A2-E41C041B582E.png"
 )
 
-st.markdown(
-    '<div class="subtitle">'
-    '나만의 몬치치를 정성껏 키워보세요 💗'
-    '</div>',
-    unsafe_allow_html=True
-)
-
-
-# =========================================================
-# 캐릭터
-# =========================================================
-
-st.markdown(
-    '<div class="character-box">',
-    unsafe_allow_html=True
-)
-
-st.markdown(
-    f'<div class="badge">'
-    f'{stage_icon} {stage_name}'
-    f'</div>',
-    unsafe_allow_html=True
-)
-
-
-# =========================================================
-# ★★★★★ 중요 ★★★★★
-# 네가 알려준 이미지 경로
-# =========================================================
-
-image_path = (
-    Path(__file__).parent
+CHARACTER = (
+    BASE_DIR
     / "assets"
     / "CE442387-F366-4FB2-A0B6-11704E0A474A.png"
 )
 
 
-if image_path.exists():
+def image_to_base64(path):
 
-    st.image(
-        str(image_path),
-        width=350
-    )
+    if not path.exists():
+        return ""
 
-else:
+    data = path.read_bytes()
+
+    return base64.b64encode(data).decode("utf-8")
+
+
+background_data = image_to_base64(BACKGROUND)
+character_data = image_to_base64(CHARACTER)
+
+
+# =========================================================
+# 이미지 오류 확인
+# =========================================================
+
+if not background_data:
 
     st.error(
-        "캐릭터 이미지를 찾을 수 없습니다."
+        "방 배경 이미지를 찾을 수 없습니다.\n\n"
+        "assets/735A6F89-95B8-4CEA-80A2-E41C041B582E.png"
     )
 
-    st.code(
+    st.stop()
+
+
+if not character_data:
+
+    st.error(
+        "몬치치 캐릭터 이미지를 찾을 수 없습니다.\n\n"
         "assets/CE442387-F366-4FB2-A0B6-11704E0A474A.png"
     )
 
-
-# =========================================================
-# 상태 메시지
-# =========================================================
-
-if st.session_state.sleeping:
-
-    st.markdown(
-        "💤 **Zzz... 몬치치가 곤히 자고 있어요!**"
-    )
-
-elif st.session_state.hunger <= 20:
-
-    st.markdown(
-        "🥺 **몬치치가 배고파하고 있어요...**"
-    )
-
-elif st.session_state.energy <= 20:
-
-    st.markdown(
-        "😴 **몬치치가 피곤해하고 있어요...**"
-    )
-
-elif st.session_state.happiness >= 80:
-
-    st.markdown(
-        "💗 **몬치치가 정말 행복해 보여요!**"
-    )
-
-else:
-
-    st.markdown(
-        "🐒 **몬치치가 당신을 바라보고 있어요!**"
-    )
-
-
-st.markdown(
-    '</div>',
-    unsafe_allow_html=True
-)
+    st.stop()
 
 
 # =========================================================
-# 정보
+# 게임 HTML
 # =========================================================
 
-col1, col2, col3 = st.columns(3)
+html = f"""
+<!DOCTYPE html>
 
-with col1:
+<html lang="ko">
 
-    st.metric(
-        "🎂 나이",
-        f"{st.session_state.age}일"
-    )
+<head>
 
-with col2:
+<meta charset="UTF-8">
 
-    st.metric(
-        "🪙 코인",
-        st.session_state.coin
-    )
+<meta name="viewport"
+content="width=device-width,
+initial-scale=1.0,
+maximum-scale=1.0,
+user-scalable=no">
 
-with col3:
+<style>
 
-    st.metric(
-        "⭐ XP",
-        st.session_state.xp
-    )
+/* =====================================================
+   기본
+===================================================== */
 
+* {{
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+}}
 
-# =========================================================
-# 상태창
-# =========================================================
+body {{
+    margin: 0;
+    padding: 0;
 
-st.markdown(
-    '<div class="status-box">',
-    unsafe_allow_html=True
-)
+    background: #fff0f5;
 
-st.subheader("📊 몬치치 상태")
+    font-family:
+        Arial,
+        sans-serif;
 
+    overflow-x: hidden;
+}}
 
-st.write(
-    f"🍌 배고픔   {st.session_state.hunger}%"
-)
 
-st.progress(
-    st.session_state.hunger / 100
-)
+/* =====================================================
+   게임 전체
+===================================================== */
 
+.game {{
+    width: 100%;
+    max-width: 1000px;
 
-st.write(
-    f"💗 행복   {st.session_state.happiness}%"
-)
+    margin: auto;
 
-st.progress(
-    st.session_state.happiness / 100
-)
+    position: relative;
+}}
 
 
-st.write(
-    f"⚡ 에너지   {st.session_state.energy}%"
-)
+/* =====================================================
+   제목
+===================================================== */
 
-st.progress(
-    st.session_state.energy / 100
-)
+.title {{
+    text-align: center;
 
+    font-size: clamp(25px, 5vw, 42px);
 
-st.write(
-    f"🫧 청결   {st.session_state.clean}%"
-)
+    font-weight: 900;
 
-st.progress(
-    st.session_state.clean / 100
-)
+    color: #69462f;
 
+    padding: 12px 0 5px;
+}}
 
-st.write(
-    f"❤️ 건강   {st.session_state.health}%"
-)
+.subtitle {{
+    text-align: center;
 
-st.progress(
-    st.session_state.health / 100
-)
+    color: #a36f77;
 
+    font-size: 14px;
 
-st.markdown(
-    '</div>',
-    unsafe_allow_html=True
-)
+    margin-bottom: 10px;
+}}
 
 
-# =========================================================
-# 돌보기
-# =========================================================
+/* =====================================================
+   상단 상태
+===================================================== */
 
-st.markdown(
-    '<div class="status-box">',
-    unsafe_allow_html=True
-)
+.top {{
+    display: flex;
 
-st.subheader("💗 몬치치 돌보기")
+    justify-content: space-between;
 
+    gap: 7px;
 
-col1, col2 = st.columns(2)
+    margin: 0 8px 10px;
+}}
 
+.info {{
+    background: white;
 
-with col1:
+    border: 2px solid #efc4cf;
 
-    if st.button(
-        "🍌 먹이기",
-        use_container_width=True
-    ):
+    border-radius: 15px;
 
-        feed()
+    padding: 7px 10px;
 
-        st.rerun()
+    text-align: center;
 
+    flex: 1;
 
-    if st.button(
-        "🎮 놀아주기",
-        use_container_width=True
-    ):
+    color: #69462f;
 
-        play()
+    font-size: 13px;
 
-        st.rerun()
+    box-shadow: 0 3px 0 #e8bbc6;
+}}
 
+.info strong {{
+    display: block;
 
-    if st.button(
-        "🛁 목욕시키기",
-        use_container_width=True
-    ):
+    font-size: 17px;
+}}
 
-        bath()
 
-        st.rerun()
+/* =====================================================
+   방
+===================================================== */
 
+.room {{
+    position: relative;
 
-with col2:
+    width: 100%;
 
-    if st.button(
-        "💗 쓰다듬기",
-        use_container_width=True
-    ):
+    aspect-ratio: 16 / 9;
 
-        pet()
+    overflow: hidden;
 
-        st.rerun()
+    border-radius: 22px;
 
+    border: 4px solid #e5b3c0;
 
-    if st.button(
-        "💤 재우기 / 깨우기",
-        use_container_width=True
-    ):
+    box-shadow:
+        0 7px 0 #dcaab7,
+        0 12px 25px rgba(120,70,80,0.15);
 
-        sleep()
+    background-image:
+        url("data:image/png;base64,{background_data}");
 
-        st.rerun()
+    background-size: cover;
 
+    background-position: center;
+}}
 
-    if st.button(
-        "🎁 선물 상자",
-        use_container_width=True
-    ):
 
-        if st.session_state.coin >= 5:
+/* =====================================================
+   캐릭터
+===================================================== */
 
-            st.session_state.coin -= 5
+.character {{
+    position: absolute;
 
-            reward = random.choice([
-                "🌸 예쁜 꽃을 얻었어요!",
-                "🍌 맛있는 바나나를 얻었어요!",
-                "💗 몬치치의 행복도가 올랐어요!",
-                "🪙 코인 10개를 찾았어요!"
-            ])
+    width: 25%;
 
-            if "행복" in reward:
+    left: 50%;
 
-                st.session_state.happiness = limit(
-                    st.session_state.happiness + 15
-                )
+    bottom: 5%;
 
-            elif "🪙" in reward:
+    transform:
+        translateX(-50%);
 
-                st.session_state.coin += 10
+    z-index: 10;
 
-            add_log(
-                "🎁 " + reward
-            )
+    pointer-events: none;
 
-        else:
+    transition:
+        transform .3s ease;
+}}
 
-            add_log(
-                "🪙 선물 상자를 열려면 "
-                "코인 5개가 필요해요!"
-            )
+.character img {{
+    width: 100%;
 
-        st.rerun()
+    height: auto;
 
+    display: block;
 
-st.markdown(
-    '</div>',
-    unsafe_allow_html=True
-)
+    filter:
+        drop-shadow(0 5px 3px rgba(70,40,20,.2));
+}}
 
 
-# =========================================================
-# 성장 시스템
-# =========================================================
+/* =====================================================
+   캐릭터 기본 움직임
+===================================================== */
 
-st.markdown(
-    '<div class="status-box">',
-    unsafe_allow_html=True
-)
+.bounce {{
+    animation:
+        bounce .55s ease;
+}}
 
-st.subheader("🌱 성장")
+@keyframes bounce {{
 
+    0% {{
+        transform:
+            translateX(-50%)
+            translateY(0);
+    }}
 
-if st.session_state.xp < 30:
+    30% {{
+        transform:
+            translateX(-50%)
+            translateY(-18px);
+    }}
 
-    remaining = 30 - st.session_state.xp
+    60% {{
+        transform:
+            translateX(-50%)
+            translateY(0);
+    }}
 
-    st.write(
-        f"🐣 어린이 몬치치까지 "
-        f"**{remaining} XP** 남았어요!"
-    )
+    80% {{
+        transform:
+            translateX(-50%)
+            translateY(-7px);
+    }}
 
-    st.progress(
-        st.session_state.xp / 30
-    )
+    100% {{
+        transform:
+            translateX(-50%)
+            translateY(0);
+    }}
 
+}}
 
-elif st.session_state.xp < 80:
 
-    remaining = 80 - st.session_state.xp
+/* =====================================================
+   잠자기
+===================================================== */
 
-    st.write(
-        f"🌱 청소년 몬치치까지 "
-        f"**{remaining} XP** 남았어요!"
-    )
+.sleeping {{
+    animation:
+        sleepMove 2s ease-in-out infinite;
+}}
 
-    st.progress(
-        (st.session_state.xp - 30) / 50
-    )
+@keyframes sleepMove {{
 
+    0%,100% {{
+        transform:
+            translateX(-50%)
+            translateY(0)
+            rotate(-2deg);
+    }}
 
-elif st.session_state.xp < 160:
+    50% {{
+        transform:
+            translateX(-50%)
+            translateY(5px)
+            rotate(2deg);
+    }}
 
-    remaining = 160 - st.session_state.xp
+}}
 
-    st.write(
-        f"⭐ 어른 몬치치까지 "
-        f"**{remaining} XP** 남았어요!"
-    )
 
-    st.progress(
-        (st.session_state.xp - 80) / 80
-    )
+/* =====================================================
+   터치 가능한 아이템
+===================================================== */
 
+.item {{
+    position: absolute;
 
-else:
+    z-index: 20;
 
-    st.success(
-        "👑 몬치치가 최종 성장 단계에 도달했어요!"
-    )
+    cursor: pointer;
 
+    border-radius: 20px;
 
-st.markdown(
-    '</div>',
-    unsafe_allow_html=True
-)
+    transition:
+        transform .15s ease;
+}}
 
+.item:active {{
+    transform: scale(.85);
+}}
 
-# =========================================================
-# 최근 기록
-# =========================================================
 
-st.markdown(
-    '<div class="status-box">',
-    unsafe_allow_html=True
-)
+/* =====================================================
+   아이템 터치 안내
+===================================================== */
 
-st.subheader("📖 최근 기록")
+.item::after {{
 
+    content: "";
 
-for log in st.session_state.logs:
+    position: absolute;
 
-    st.markdown(
-        f'<div class="log">{log}</div>',
-        unsafe_allow_html=True
-    )
+    inset: -5px;
 
+    border-radius: 20px;
 
-st.markdown(
-    '</div>',
-    unsafe_allow_html=True
-)
+    border: 2px dashed rgba(255,120,150,.0);
 
+    transition: .2s;
 
-# =========================================================
-# 게임 설명
-# =========================================================
+}}
 
-with st.expander("📚 게임 방법"):
+.item:hover::after {{
 
-    st.write("""
-### 🐒 몬치치 돌보기 게임
+    border-color:
+        rgba(255,120,150,.7);
 
-🍌 **먹이기**
-- 배고픔 증가
-- 행복 증가
-- 코인 2개 사용
+}}
 
-🎮 **놀아주기**
-- 행복 증가
-- XP 증가
-- 코인 획득
-- 에너지 감소
 
-🛁 **목욕시키기**
-- 청결 증가
-- 행복 증가
+/* =====================================================
+   아이템 위치
+===================================================== */
 
-💗 **쓰다듬기**
-- 행복 증가
-- XP 증가
+/*
+   배경 이미지에 맞춰 터치 영역을 배치
+*/
 
-💤 **재우기**
-- 시간이 지나면 에너지 회복
+/* 🍌 바나나 */
 
-🎁 **선물 상자**
-- 코인 5개 사용
-- 랜덤 보상
+.banana {{
+    width: 13%;
 
-⭐ **성장**
-- XP를 모으면 몬치치가 성장해요!
+    height: 18%;
 
-⏰ **시간**
-- 시간이 지나면 배고픔, 행복, 에너지, 청결이 조금씩 감소해요.
-""")
+    right: 12%;
 
+    bottom: 7%;
+}}
 
-# =========================================================
-# 자동 업데이트
-# =========================================================
 
-st.markdown("""
+/* 🛏️ 침대 */
+
+.bed {{
+    width: 28%;
+
+    height: 35%;
+
+    left: 2%;
+
+    bottom: 24%;
+}}
+
+
+/* 💗 쿠션 */
+
+.cushion {{
+    width: 17%;
+
+    height: 20%;
+
+    right: 3%;
+
+    bottom: 4%;
+}}
+
+
+/* 🛁 목욕 */
+
+.bath {{
+    width: 17%;
+
+    height: 25%;
+
+    left: 29%;
+
+    bottom: 15%;
+}}
+
+
+/* 📚 책장 */
+
+.books {{
+    width: 20%;
+
+    height: 40%;
+
+    right: 2%;
+
+    top: 25%;
+}}
+
+
+/* =====================================================
+   효과
+===================================================== */
+
+.effect {{
+    position: absolute;
+
+    pointer-events: none;
+
+    z-index: 50;
+
+    font-weight: bold;
+
+    animation:
+        effectUp 1s ease forwards;
+}}
+
+@keyframes effectUp {{
+
+    0% {{
+        opacity: 0;
+
+        transform:
+            translateY(15px)
+            scale(.5);
+    }}
+
+    25% {{
+        opacity: 1;
+
+        transform:
+            translateY(0)
+            scale(1.2);
+    }}
+
+    100% {{
+        opacity: 0;
+
+        transform:
+            translateY(-65px)
+            scale(1);
+    }}
+
+}}
+
+
+/* =====================================================
+   바나나 날아가기
+===================================================== */
+
+.flying-banana {{
+    position: absolute;
+
+    z-index: 60;
+
+    font-size: 30px;
+
+    animation:
+        bananaFly 1s ease forwards;
+}}
+
+@keyframes bananaFly {{
+
+    0% {{
+        right: 13%;
+        bottom: 12%;
+        opacity: 1;
+    }}
+
+    100% {{
+        right: 48%;
+        bottom: 45%;
+        opacity: 0;
+        transform: rotate(-360deg) scale(.6);
+    }}
+
+}}
+
+
+/* =====================================================
+   하트
+===================================================== */
+
+.heart {{
+    position: absolute;
+
+    font-size: 25px;
+
+    z-index: 55;
+
+    animation:
+        heartUp 1.2s ease forwards;
+}}
+
+@keyframes heartUp {{
+
+    0% {{
+        opacity: 0;
+
+        transform:
+            translateY(10px)
+            scale(.5);
+    }}
+
+    30% {{
+        opacity: 1;
+
+        transform:
+            translateY(0)
+            scale(1.2);
+    }}
+
+    100% {{
+        opacity: 0;
+
+        transform:
+            translateY(-80px)
+            scale(.8);
+    }}
+
+}}
+
+
+/* =====================================================
+   비눗방울
+===================================================== */
+
+.bubble {{
+    position: absolute;
+
+    z-index: 55;
+
+    font-size: 22px;
+
+    animation:
+        bubbleUp 1.5s ease forwards;
+}}
+
+@keyframes bubbleUp {{
+
+    0% {{
+        opacity: 0;
+
+        transform:
+            translateY(20px)
+            scale(.4);
+    }}
+
+    30% {{
+        opacity: 1;
+    }}
+
+    100% {{
+        opacity: 0;
+
+        transform:
+            translateY(-100px)
+            scale(1.4);
+    }}
+
+}}
+
+
+/* =====================================================
+   별
+===================================================== */
+
+.star {{
+    position: absolute;
+
+    z-index: 55;
+
+    font-size: 25px;
+
+    animation:
+        starPop 1s ease forwards;
+}}
+
+@keyframes starPop {{
+
+    0% {{
+        opacity: 0;
+
+        transform: scale(.2);
+    }}
+
+    40% {{
+        opacity: 1;
+
+        transform: scale(1.4)
+        rotate(15deg);
+    }}
+
+    100% {{
+        opacity: 0;
+
+        transform:
+            translateY(-60px)
+            scale(.7)
+            rotate(45deg);
+    }}
+
+}}
+
+
+/* =====================================================
+   ZZZ
+===================================================== */
+
+.zzz {{
+    position: absolute;
+
+    left: 54%;
+
+    bottom: 55%;
+
+    z-index: 70;
+
+    font-size: 25px;
+
+    color: #68452f;
+
+    font-weight: bold;
+
+    animation:
+        zzzMove 2s ease-in-out infinite;
+}}
+
+@keyframes zzzMove {{
+
+    0% {{
+        opacity: 0;
+
+        transform:
+            translate(0,10px);
+    }}
+
+    50% {{
+        opacity: 1;
+
+        transform:
+            translate(20px,-15px);
+    }}
+
+    100% {{
+        opacity: 0;
+
+        transform:
+            translate(40px,-35px);
+    }}
+
+}}
+
+
+/* =====================================================
+   행동 메시지
+===================================================== */
+
+.message {{
+
+    position: absolute;
+
+    left: 50%;
+
+    top: 5%;
+
+    transform:
+        translateX(-50%);
+
+    z-index: 80;
+
+    background: white;
+
+    border: 3px solid #efc2ce;
+
+    border-radius: 20px;
+
+    padding: 9px 15px;
+
+    color: #68452f;
+
+    font-size: 15px;
+
+    white-space: nowrap;
+
+    box-shadow:
+        0 4px 0 #e4b5c0;
+
+    animation:
+        messageShow 2s ease forwards;
+
+}}
+
+@keyframes messageShow {{
+
+    0% {{
+        opacity: 0;
+
+        transform:
+            translateX(-50%)
+            translateY(10px);
+    }}
+
+    15%,75% {{
+        opacity: 1;
+
+        transform:
+            translateX(-50%)
+            translateY(0);
+    }}
+
+    100% {{
+        opacity: 0;
+    }}
+
+}}
+
+
+/* =====================================================
+   상태창
+===================================================== */
+
+.status {{
+    background: white;
+
+    border: 3px solid #efc5d0;
+
+    border-radius: 22px;
+
+    margin-top: 12px;
+
+    padding: 15px;
+
+    box-shadow:
+        0 5px 0 #e5b8c3;
+}}
+
+.stat {{
+    margin-bottom: 10px;
+}}
+
+.stat:last-child {{
+    margin-bottom: 0;
+}}
+
+.stat-title {{
+    display: flex;
+
+    justify-content:
+        space-between;
+
+    color: #68452f;
+
+    font-size: 14px;
+
+    margin-bottom: 4px;
+}}
+
+.bar {{
+    height: 15px;
+
+    background: #f4e4e8;
+
+    border-radius: 20px;
+
+    overflow: hidden;
+}}
+
+.fill {{
+    height: 100%;
+
+    width: 80%;
+
+    border-radius: 20px;
+
+    transition:
+        width .4s ease;
+}}
+
+.hunger {{
+    background: #f2bd65;
+}}
+
+.happy {{
+    background: #ef8eaf;
+}}
+
+.energy {{
+    background: #91bfe9;
+}}
+
+.clean {{
+    background: #8ed4c0;
+}}
+
+
+/* =====================================================
+   안내
+===================================================== */
+
+.tip {{
+    text-align: center;
+
+    color: #a47777;
+
+    font-size: 13px;
+
+    padding: 12px 5px 20px;
+}}
+
+
+/* 모바일
+===================================================== */
+
+@media(max-width:600px) {{
+
+    .room {{
+        border-radius: 15px;
+
+        border-width: 3px;
+    }}
+
+    .title {{
+        font-size: 30px;
+    }}
+
+    .subtitle {{
+        font-size: 13px;
+    }}
+
+    .info {{
+        font-size: 11px;
+
+        padding: 5px;
+    }}
+
+    .info strong {{
+        font-size: 14px;
+    }}
+
+    .character {{
+        width: 27%;
+    }}
+
+    .message {{
+        font-size: 12px;
+
+        padding: 7px 11px;
+    }}
+
+}}
+
+
+</style>
+
+</head>
+
+
+<body>
+
+
+<div class="game">
+
+
+<div class="title">
+🐒 몬치치 키우기
+</div>
+
+
+<div class="subtitle">
+방 안의 아이템을 직접 터치해서 몬치치를 돌봐주세요! 💗
+</div>
+
+
+<!-- ===================================================
+     상단 정보
+=================================================== -->
+
+<div class="top">
+
+    <div class="info">
+        🎂
+        <strong id="age">1일</strong>
+        나이
+    </div>
+
+    <div class="info">
+        🪙
+        <strong id="coin">20</strong>
+        코인
+    </div>
+
+    <div class="info">
+        ⭐
+        <strong id="xp">0</strong>
+        XP
+    </div>
+
+</div>
+
+
+<!-- ===================================================
+     방
+=================================================== -->
+
+<div class="room" id="room">
+
+
+<!-- 행동 메시지 -->
+
+<div id="messageContainer"></div>
+
+
+<!-- 몬치치 -->
+
+<div
+    class="character"
+    id="character"
+>
+
+<img
+    src="data:image/png;base64,{character_data}"
+>
+
+</div>
+
+
+<!-- =================================================
+     터치 아이템
+================================================= -->
+
+
+<!-- 🍌 바나나 -->
+
+<div
+    class="item banana"
+    onclick="feed()"
+    title="먹이기"
+></div>
+
+
+<!-- 🛏️ 침대 -->
+
+<div
+    class="item bed"
+    onclick="sleepPet()"
+    title="재우기"
+></div>
+
+
+<!-- 💗 쿠션 -->
+
+<div
+    class="item cushion"
+    onclick="pet()"
+    title="쓰다듬기"
+></div>
+
+
+<!-- 🫧 목욕 -->
+
+<div
+    class="item bath"
+    onclick="bath()"
+    title="씻기기"
+></div>
+
+
+<!-- 📚 책장 -->
+
+<div
+    class="item books"
+    onclick="play()"
+    title="놀아주기"
+></div>
+
+
+</div>
+
+
+<!-- ===================================================
+     상태
+=================================================== -->
+
+<div class="status">
+
+
+<div class="stat">
+
+    <div class="stat-title">
+
+        <span>🍌 배고픔</span>
+
+        <span id="hungerText">
+            80%
+        </span>
+
+    </div>
+
+    <div class="bar">
+
+        <div
+            class="fill hunger"
+            id="hungerBar"
+            style="width:80%"
+        ></div>
+
+    </div>
+
+</div>
+
+
+<div class="stat">
+
+    <div class="stat-title">
+
+        <span>💗 행복</span>
+
+        <span id="happyText">
+            80%
+        </span>
+
+    </div>
+
+    <div class="bar">
+
+        <div
+            class="fill happy"
+            id="happyBar"
+            style="width:80%"
+        ></div>
+
+    </div>
+
+</div>
+
+
+<div class="stat">
+
+    <div class="stat-title">
+
+        <span>⚡ 에너지</span>
+
+        <span id="energyText">
+            80%
+        </span>
+
+    </div>
+
+    <div class="bar">
+
+        <div
+            class="fill energy"
+            id="energyBar"
+            style="width:80%"
+        ></div>
+
+    </div>
+
+</div>
+
+
+<div class="stat">
+
+    <div class="stat-title">
+
+        <span>🫧 청결</span>
+
+        <span id="cleanText">
+            80%
+        </span>
+
+    </div>
+
+    <div class="bar">
+
+        <div
+            class="fill clean"
+            id="cleanBar"
+            style="width:80%"
+        ></div>
+
+    </div>
+
+</div>
+
+
+</div>
+
+
+<div class="tip">
+
+💡 방 안의 물건을 눌러보세요!
+<br>
+🍌 바나나 = 먹이기　🛏️ 침대 = 재우기　🫧 목욕 = 씻기기　💗 쿠션 = 쓰다듬기　📚 책장 = 놀아주기
+
+</div>
+
+
+</div>
+
+
 <script>
 
-setTimeout(
-    function() {
-        window.parent.location.reload();
-    },
-    10000
-);
+/* =====================================================
+   게임 데이터
+===================================================== */
+
+let hunger = 80;
+
+let happiness = 80;
+
+let energy = 80;
+
+let clean = 80;
+
+let coin = 20;
+
+let xp = 0;
+
+let age = 1;
+
+let sleeping = false;
+
+
+/* =====================================================
+   HTML 요소
+===================================================== */
+
+const character =
+    document.getElementById("character");
+
+const room =
+    document.getElementById("room");
+
+
+/* =====================================================
+   숫자 제한
+===================================================== */
+
+function limit(value) {{
+
+    return Math.max(
+        0,
+        Math.min(100, value)
+    );
+
+}}
+
+
+/* =====================================================
+   상태 업데이트
+===================================================== */
+
+function updateStats() {{
+
+    document.getElementById(
+        "hungerText"
+    ).innerText =
+        Math.round(hunger) + "%";
+
+
+    document.getElementById(
+        "happyText"
+    ).innerText =
+        Math.round(happiness) + "%";
+
+
+    document.getElementById(
+        "energyText"
+    ).innerText =
+        Math.round(energy) + "%";
+
+
+    document.getElementById(
+        "cleanText"
+    ).innerText =
+        Math.round(clean) + "%";
+
+
+    document.getElementById(
+        "hungerBar"
+    ).style.width =
+        hunger + "%";
+
+
+    document.getElementById(
+        "happyBar"
+    ).style.width =
+        happiness + "%";
+
+
+    document.getElementById(
+        "energyBar"
+    ).style.width =
+        energy + "%";
+
+
+    document.getElementById(
+        "cleanBar"
+    ).style.width =
+        clean + "%";
+
+
+    document.getElementById(
+        "coin"
+    ).innerText =
+        coin;
+
+
+    document.getElementById(
+        "xp"
+    ).innerText =
+        xp;
+
+
+    document.getElementById(
+        "age"
+    ).innerText =
+        age + "일";
+
+}}
+
+
+/* =====================================================
+   메시지
+===================================================== */
+
+function message(text) {{
+
+    const box =
+        document.createElement("div");
+
+    box.className =
+        "message";
+
+    box.innerText =
+        text;
+
+    document
+        .getElementById(
+            "messageContainer"
+        )
+        .appendChild(box);
+
+
+    setTimeout(
+        () => box.remove(),
+        2100
+    );
+
+}}
+
+
+/* =====================================================
+   캐릭터 튕기기
+===================================================== */
+
+function bounce() {{
+
+    character.classList.remove(
+        "bounce"
+    );
+
+    void character.offsetWidth;
+
+    character.classList.add(
+        "bounce"
+    );
+
+}}
+
+
+/* =====================================================
+   하트 효과
+===================================================== */
+
+function heartEffect(count = 4) {{
+
+    for(
+        let i = 0;
+        i < count;
+        i++
+    ) {{
+
+        setTimeout(() => {{
+
+            const heart =
+                document.createElement(
+                    "div"
+                );
+
+            heart.className =
+                "heart";
+
+            heart.innerText =
+                Math.random() > .5
+                ? "💗"
+                : "💕";
+
+
+            heart.style.left =
+                (45 + Math.random() * 15)
+                + "%";
+
+
+            heart.style.bottom =
+                (30 + Math.random() * 20)
+                + "%";
+
+
+            room.appendChild(
+                heart
+            );
+
+
+            setTimeout(
+                () => heart.remove(),
+                1300
+            );
+
+        }}, i * 150);
+
+    }}
+
+}}
+
+
+/* =====================================================
+   별 효과
+===================================================== */
+
+function starEffect() {{
+
+    for(
+        let i = 0;
+        i < 5;
+        i++
+    ) {{
+
+        setTimeout(() => {{
+
+            const star =
+                document.createElement(
+                    "div"
+                );
+
+            star.className =
+                "star";
+
+            star.innerText =
+                "⭐";
+
+
+            star.style.left =
+                (42 + Math.random() * 20)
+                + "%";
+
+
+            star.style.bottom =
+                (35 + Math.random() * 20)
+                + "%";
+
+
+            room.appendChild(
+                star
+            );
+
+
+            setTimeout(
+                () => star.remove(),
+                1100
+            );
+
+        }}, i * 100);
+
+    }}
+
+}}
+
+
+/* =====================================================
+   비눗방울
+===================================================== */
+
+function bubbles() {{
+
+    for(
+        let i = 0;
+        i < 8;
+        i++
+    ) {{
+
+        setTimeout(() => {{
+
+            const bubble =
+                document.createElement(
+                    "div"
+                );
+
+            bubble.className =
+                "bubble";
+
+            bubble.innerText =
+                Math.random() > .5
+                ? "🫧"
+                : "○";
+
+
+            bubble.style.left =
+                (35 + Math.random() * 30)
+                + "%";
+
+
+            bubble.style.bottom =
+                (30 + Math.random() * 15)
+                + "%";
+
+
+            room.appendChild(
+                bubble
+            );
+
+
+            setTimeout(
+                () => bubble.remove(),
+                1600
+            );
+
+        }}, i * 120);
+
+    }}
+
+}}
+
+
+/* =====================================================
+   🍌 먹이기
+===================================================== */
+
+function feed() {{
+
+    if(coin < 2) {{
+
+        message(
+            "🪙 코인이 부족해요!"
+        );
+
+        return;
+    }}
+
+
+    coin -= 2;
+
+    hunger =
+        limit(hunger + 20);
+
+    happiness =
+        limit(happiness + 5);
+
+    xp += 2;
+
+
+    /* 바나나 날아가기 */
+
+    const banana =
+        document.createElement(
+            "div"
+        );
+
+    banana.className =
+        "flying-banana";
+
+    banana.innerText =
+        "🍌";
+
+
+    room.appendChild(
+        banana
+    );
+
+
+    setTimeout(
+        () => banana.remove(),
+        1100
+    );
+
+
+    setTimeout(
+        () => bounce(),
+        650
+    );
+
+
+    message(
+        "🍌 냠냠! 맛있다!"
+    );
+
+
+    heartEffect(2);
+
+
+    updateStats();
+
+}}
+
+
+/* =====================================================
+   🫧 씻기기
+===================================================== */
+
+function bath() {{
+
+    clean =
+        limit(clean + 30);
+
+    happiness =
+        limit(happiness + 5);
+
+    xp += 3;
+
+
+    bubbles();
+
+    bounce();
+
+
+    message(
+        "🫧 뽀득뽀득 깨끗해졌어요!"
+    );
+
+
+    updateStats();
+
+}}
+
+
+/* =====================================================
+   💗 쓰다듬기
+===================================================== */
+
+function pet() {{
+
+    happiness =
+        limit(happiness + 10);
+
+    xp += 1;
+
+
+    bounce();
+
+    heartEffect(6);
+
+
+    message(
+        "💗 쓰담쓰담~ 기분이 좋아요!"
+    );
+
+
+    updateStats();
+
+}}
+
+
+/* =====================================================
+   📚 놀아주기
+===================================================== */
+
+function play() {{
+
+    if(energy < 15) {{
+
+        message(
+            "😴 너무 피곤해요..."
+        );
+
+        return;
+    }}
+
+
+    energy =
+        limit(energy - 15);
+
+
+    happiness =
+        limit(happiness + 20);
+
+
+    hunger =
+        limit(hunger - 5);
+
+
+    coin += 3;
+
+    xp += 7;
+
+
+    bounce();
+
+    starEffect();
+
+    heartEffect(3);
+
+
+    message(
+        "🎮 신나게 놀았어요! 🪙 +3"
+    );
+
+
+    updateStats();
+
+}}
+
+
+/* =====================================================
+   💤 재우기
+===================================================== */
+
+function sleepPet() {{
+
+    sleeping =
+        !sleeping;
+
+
+    if(sleeping) {{
+
+        character.classList.add(
+            "sleeping"
+        );
+
+
+        const zzz =
+            document.createElement(
+                "div"
+            );
+
+        zzz.className =
+            "zzz";
+
+        zzz.id =
+            "zzz";
+
+        zzz.innerText =
+            "Zzz...";
+
+
+        room.appendChild(
+            zzz
+        );
+
+
+        message(
+            "💤 몬치치가 잠들었어요..."
+        );
+
+    }}
+
+    else {{
+
+        character.classList.remove(
+            "sleeping"
+        );
+
+
+        const zzz =
+            document.getElementById(
+                "zzz"
+            );
+
+        if(zzz) {{
+            zzz.remove();
+        }}
+
+
+        message(
+            "☀️ 몬치치가 일어났어요!"
+        );
+
+    }}
+
+}}
+
+
+/* =====================================================
+   시간 흐름
+===================================================== */
+
+setInterval(() => {{
+
+    if(sleeping) {{
+
+        energy =
+            limit(energy + 4);
+
+        hunger =
+            limit(hunger - 1);
+
+    }}
+
+    else {{
+
+        hunger =
+            limit(hunger - 1);
+
+        happiness =
+            limit(happiness - 0.5);
+
+        energy =
+            limit(energy - 0.5);
+
+        clean =
+            limit(clean - 0.5);
+
+    }}
+
+
+    updateStats();
+
+}}, 10000);
+
+
+/* =====================================================
+   성장
+===================================================== */
+
+setInterval(() => {{
+
+    if(xp >= 30 && age === 1) {{
+
+        age = 2;
+
+        message(
+            "🌱 몬치치가 조금 자랐어요!"
+        );
+
+    }}
+
+
+    if(xp >= 80 && age === 2) {{
+
+        age = 3;
+
+        message(
+            "⭐ 몬치치가 더 성장했어요!"
+        );
+
+    }}
+
+
+    if(xp >= 160 && age === 3) {{
+
+        age = 4;
+
+        message(
+            "👑 몬치치가 완전히 성장했어요!"
+        );
+
+    }}
+
+
+    updateStats();
+
+}}, 1000);
+
+
+/* =====================================================
+   시작
+===================================================== */
+
+updateStats();
 
 </script>
-""", unsafe_allow_html=True)
+
+</body>
+
+</html>
+"""
+
+
+# =========================================================
+# Streamlit에 게임 표시
+# =========================================================
+
+components.html(
+    html,
+    height=850,
+    scrolling=False
+)

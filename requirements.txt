@@ -4,3 +4,7 @@ openai
 streamlit
 requests
 streamlit
+
+streamlit
+openai
+pypdf

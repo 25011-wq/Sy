@@ -1,257 +1,315 @@
 
+import os
 import streamlit as st
-from openai import OpenAI
+from openai import OpenAI, AuthenticationError, RateLimitError
+from openai import APIConnectionError, APIStatusError
 
-# -----------------------------------
-# 페이지 설정
-# -----------------------------------
+# =====================================
+# 1. 기본 설정
+# =====================================
+
 st.set_page_config(
     page_title="학생 건강 도우미",
     page_icon="🌿",
     layout="centered"
 )
 
-# -----------------------------------
-# API 설정
-# -----------------------------------
-try:
-    client = OpenAI(
-        api_key=st.secrets["OPENAI_API_KEY"]
-    )
-except Exception:
-    client = None
-
-# -----------------------------------
-# 스타일
-# -----------------------------------
 st.markdown("""
 <style>
 .stApp {
-    background-color: #F6FAF8;
+    background-color: #F5FAF7;
 }
 h1 {
-    color: #246B55;
+    color: #247451;
 }
 h2, h3 {
-    color: #347D65;
+    color: #327D5A;
 }
-div.stButton > button {
-    background-color: #347D65;
+.stButton button {
+    background-color: #32815D;
     color: white;
     border-radius: 10px;
-    width: 100%;
+    height: 45px;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# -----------------------------------
-# 제목
-# -----------------------------------
+# =====================================
+# 2. API 키 불러오기
+# =====================================
+
+def get_api_key():
+    # Streamlit Secrets 우선 확인
+    try:
+        key = st.secrets.get("OPENAI_API_KEY", "")
+        if key:
+            return str(key).strip()
+    except Exception:
+        pass
+
+    # 환경변수 확인
+    return os.getenv("OPENAI_API_KEY", "").strip()
+
+
+def get_client():
+    key = get_api_key()
+
+    if not key:
+        return None
+
+    return OpenAI(
+        api_key=key,
+        timeout=60.0,
+        max_retries=2
+    )
+
+
+# =====================================
+# 3. 제목
+# =====================================
+
 st.title("🌿 학생 건강 도우미")
 
-st.write(
-    "증상에 따른 건강 정보를 확인하고 "
-    "식단과 생활 습관을 알아보세요."
-)
+st.write("""
+나의 증상을 입력하고 건강 상태에 관한 정보,
+식단 및 생활 관리 방법을 확인해 보세요.
+""")
 
 st.info(
-    "이 프로그램은 건강 교육용입니다. "
-    "의사의 진단을 대신하지 않습니다."
+    "본 서비스는 건강 교육을 위한 AI 프로그램이며 "
+    "의사의 진단이나 약사의 복약 지도를 대신하지 않습니다."
 )
 
-# -----------------------------------
-# 입력
-# -----------------------------------
+st.divider()
+
+# =====================================
+# 4. 사용자 입력
+# =====================================
+
+st.subheader("🩺 건강 상태 입력")
+
 with st.form("health_form"):
 
     symptoms = st.text_area(
         "현재 어떤 증상이 있나요?",
-        placeholder="예: 목이 아프고 기침이 나며 콧물이 있어요."
+        placeholder="예: 목이 아프고 기침이 나며 콧물이 나요.",
+        height=120
     )
 
-    duration = st.selectbox(
-        "증상이 얼마나 지속되었나요?",
-        [
-            "오늘부터",
-            "1~3일",
-            "4~7일",
-            "1주일 이상"
-        ]
-    )
+    col1, col2 = st.columns(2)
 
-    severity = st.select_slider(
-        "증상의 심한 정도",
-        options=[
-            "가벼움",
-            "보통",
-            "심함"
-        ]
-    )
+    with col1:
+        duration = st.selectbox(
+            "증상 지속 기간",
+            ["오늘부터", "1~3일", "4~7일", "1주일 이상"]
+        )
+
+    with col2:
+        severity = st.selectbox(
+            "증상 정도",
+            ["가벼움", "보통", "심함"]
+        )
 
     temperature = st.selectbox(
-        "체온",
-        [
-            "정상 체온",
-            "37.5~38℃",
-            "38℃ 이상",
-            "체온을 모름"
-        ]
+        "현재 체온",
+        ["정상", "37.5~38℃", "38℃ 이상", "모름"]
     )
 
     allergy = st.text_input(
-        "알레르기 또는 복용 중인 약",
-        placeholder="없으면 없음"
+        "알레르기 및 복용 중인 약",
+        placeholder="예: 없음 / 특정 약물 알레르기"
     )
 
     submitted = st.form_submit_button(
-        "건강 정보 확인하기"
+        "건강 정보 분석하기",
+        use_container_width=True
     )
 
-# -----------------------------------
-# 응급 증상 확인
-# -----------------------------------
+# =====================================
+# 5. 위험 증상 확인
+# =====================================
+
 danger_words = [
     "호흡곤란",
-    "숨을 못",
-    "의식이 없음",
+    "숨쉬기 힘들",
+    "숨을 못 쉬",
     "의식 잃",
-    "가슴을 쥐어",
+    "의식이 없",
     "심한 흉통",
+    "가슴 통증이 심",
     "경련",
     "입술이 파래",
-    "심한 알레르기",
-    "목이 부어 숨"
+    "목이 부어 숨",
+    "심한 알레르기 반응"
 ]
 
-# -----------------------------------
-# AI 분석
-# -----------------------------------
+# =====================================
+# 6. AI 건강 정보 분석
+# =====================================
+
 if submitted:
 
     if not symptoms.strip():
-        st.warning("증상을 입력해 주세요.")
+        st.warning("증상을 먼저 입력해 주세요.")
 
     elif any(word in symptoms for word in danger_words):
 
-        st.error(
-            "위험할 수 있는 증상이 포함되어 있습니다."
-        )
+        st.error("응급 평가가 필요한 증상일 수 있습니다.")
 
-        st.write(
-            "즉시 주변의 보호자나 선생님에게 알리고 "
-            "119 또는 응급의료기관에 도움을 요청하세요."
-        )
-
-    elif client is None:
-
-        st.error(
-            "API 설정을 확인해 주세요. "
-            "Streamlit Secrets에 API 키가 필요합니다."
-        )
+        st.write("""
+        즉시 주변의 보호자나 선생님에게 알리세요.
+        호흡곤란, 심한 흉통, 의식 변화 등 응급 증상이 있다면
+        119에 연락하거나 응급의료기관의 도움을 받으세요.
+        """)
 
     else:
 
-        with st.spinner("건강 정보를 분석하고 있어요..."):
+        client = None
+
+        try:
+            client = get_client()
+        except Exception:
+            st.error(
+                "API 클라이언트를 생성하지 못했습니다. "
+                "API 설정을 확인해 주세요."
+            )
+
+        if client is None and not get_api_key():
+            st.error("""
+            API 키를 찾을 수 없습니다.
+
+            Streamlit Cloud의 Settings → Secrets에서
+            OPENAI_API_KEY를 설정해 주세요.
+            """)
+        
+        elif client is not None:
 
             prompt = f"""
-당신은 학생을 위한 건강 교육 정보 도우미입니다.
+너는 고등학생을 위한 건강 교육 정보 도우미야.
 
-사용자가 입력한 증상을 바탕으로 건강 정보를 설명하세요.
+다음 정보를 바탕으로 건강 관련 교육 정보를 제공해.
 
-[입력 정보]
+[사용자 정보]
 증상: {symptoms}
 지속 기간: {duration}
-심한 정도: {severity}
+증상 정도: {severity}
 체온: {temperature}
 알레르기 및 복용 약: {allergy}
 
-[필수 안전 지침]
-
-1. 질병을 확정 진단하지 마세요.
-2. 가능한 원인을 최대 3개까지 설명하되,
-   가능성일 뿐이라는 점을 명시하세요.
-3. 학생에게 처방약을 추천하지 마세요.
-4. 일반의약품도 특정 제품의 복용을 지시하지 마세요.
-5. 약국에서 약사에게 상담할 수 있는
-   일반의약품의 종류와 주의사항을 설명하세요.
-6. 약의 용량, 복용 횟수, 복용 기간을
-   임의로 만들어내지 마세요.
-7. 약물 알레르기, 중복 성분, 나이 제한,
-   다른 약과의 상호작용을 고려하세요.
-8. 학생의 증상에 적합한 식단을 추천하세요.
-9. 증상 악화 시 피하거나 줄이면 좋은 음식과
-   그 이유를 설명하세요.
-10. 증상이 심하거나 지속되면 보호자와
-    의료진에게 도움을 요청하도록 안내하세요.
-11. 위험 증상이 의심되면 응급 진료를 안내하세요.
-12. 식단이나 음식이 질병을 치료한다고
-    표현하지 마세요.
+[안전 원칙]
+- 질병을 확정 진단하지 않는다.
+- 가능한 원인은 최대 3개까지 설명하고 불확실성을 밝힌다.
+- 처방약이나 특정 약의 복용을 지시하지 않는다.
+- 일반의약품은 약국에서 약사에게 상담할 수 있는 성분 또는 종류에 관한 일반 정보만 제공한다.
+- 복용량과 복용 횟수를 임의로 제시하지 않는다.
+- 알레르기, 중복 성분, 연령 제한 및 약물 상호작용에 주의한다.
+- 음식이 질병을 치료한다고 표현하지 않는다.
+- 위험 증상이나 악화 시 보호자와 의료진에게 도움을 요청하도록 한다.
 
 [답변 형식]
 
-### 1. 증상 이해하기
-증상에 대한 쉬운 설명
+### 1. 증상 분석
+입력한 증상에 대한 설명과 가능한 원인
 
-### 2. 가능한 원인
-가능한 원인과 그 이유
+### 2. 건강 관리 정보
+증상 완화에 도움이 될 수 있는 일반적인 생활 관리
 
-### 3. 약국에서 상담할 수 있는 정보
-일반의약품의 종류, 주의사항,
-약사에게 확인할 내용
+### 3. 약국 상담 정보
+약사에게 문의할 수 있는 일반의약품의 종류와 주의사항
 
 ### 4. 추천 식단
-아침, 점심, 저녁 및 수분 섭취
+아침, 점심, 저녁 식단 및 수분 섭취 방법
 
 ### 5. 피하거나 줄이면 좋은 음식
-음식과 이유
+증상에 따라 불편함을 악화시킬 수 있는 음식과 이유
 
-### 6. 생활 관리
-학생이 일상에서 할 수 있는 관리 방법
+### 6. 생활 습관
+수면, 휴식, 위생 등 관리 방법
 
-### 7. 병원에 가야 하는 경우
-보호자에게 알리거나 진료가 필요한 상황
+### 7. 병원 진료가 필요한 상황
+증상 악화 및 지속 시 대처 방법
 
-답변은 한국어로 작성하세요.
+학생이 이해하기 쉬운 한국어로 답변해.
 """
 
-            try:
+            st.divider()
+            st.subheader("📋 건강 분석 결과")
 
-                response = client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": (
-                                "학생 건강 교육 도우미입니다. "
-                                "의학적 진단이나 처방을 하지 않습니다. "
-                                "안전 지침을 반드시 준수하세요."
-                            )
-                        },
-                        {
-                            "role": "user",
-                            "content": prompt
-                        }
-                    ],
-                    temperature=0.3
-                )
+            with st.spinner("AI가 건강 정보를 분석하고 있습니다..."):
 
-                result = response.choices[0].message.content
+                try:
 
-                st.markdown("---")
-                st.header("📋 건강 정보 결과")
+                    response = client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[
+                            {
+                                "role": "system",
+                                "content": (
+                                    "학생 건강 교육 정보 제공 AI. "
+                                    "확정 진단과 처방은 하지 않는다."
+                                )
+                            },
+                            {
+                                "role": "user",
+                                "content": prompt
+                            }
+                        ]
+                    )
 
-                st.markdown(result)
+                    answer = response.choices[0].message.content
 
-                st.markdown("---")
+                    if answer:
+                        st.markdown(answer)
+                    else:
+                        st.warning("AI가 답변을 생성하지 못했습니다.")
 
-                st.caption(
-                    "본 결과는 AI가 생성한 건강 교육 정보입니다. "
-                    "정확한 진단과 치료는 의료진에게 문의하세요."
-                )
+                    st.success("건강 정보 분석이 완료되었습니다.")
 
-            except Exception as e:
+                except AuthenticationError:
+                    st.error("""
+                    [인증 오류]
 
-                st.error(
-                    "분석 중 오류가 발생했습니다. "
-                    "API 키와 사용량을 확인해 주세요."
-                )
+                    API 키가 잘못되었거나 유효하지 않습니다.
+                    OpenAI API 키를 다시 확인해 주세요.
+                    """)
+
+                except RateLimitError:
+                    st.error("""
+                    [사용량 또는 한도 오류]
+
+                    API 사용량 한도 또는 요청 제한을 확인해 주세요.
+                    OpenAI API 결제 및 사용량 설정을 확인하세요.
+                    """)
+
+                except APIConnectionError:
+                    st.error("""
+                    [연결 오류]
+
+                    인터넷 연결 또는 API 서버 연결을 확인해 주세요.
+                    잠시 후 다시 시도해 주세요.
+                    """)
+
+                except APIStatusError as e:
+                    st.error(
+                        f"API 서버 오류가 발생했습니다. "
+                        f"상태 코드: {e.status_code}"
+                    )
+
+                except Exception as e:
+                    st.error(
+                        f"예상하지 못한 오류가 발생했습니다: {str(e)}"
+                    )
+
+# =====================================
+# 7. 하단 안내
+# =====================================
+
+st.divider()
+
+st.caption("""
+🌿 학생 건강 도우미
+
+이 프로그램은 건강 교육 및 정보 제공 목적으로 제작되었습니다.
+실제 진단과 치료, 약물 선택은 의료진 및 약사와 상담하세요.
+""")
+
